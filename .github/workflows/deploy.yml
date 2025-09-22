@@ -22,7 +22,7 @@ jobs:
       - name: Configure AWS (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::JimboDuke:role/GitHubOIDCRole
+          role-to-assume: arn:aws:iam::454449944634:role/GitHubOIDCRole
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Set artifact name
