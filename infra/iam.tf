@@ -39,4 +39,3 @@ resource "aws_iam_role_policy_attachment" "attach_ssm_read" {
   policy_arn = aws_iam_policy.ssm_read.arn
 }
 
-data "aws_caller_identity" "me" {}
