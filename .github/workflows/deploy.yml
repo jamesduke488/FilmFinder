@@ -38,12 +38,14 @@ jobs:
           zip -r ../${{ steps.names.outputs.zip }} .
           ls -lh ../${{ steps.names.outputs.zip }}
 
-      - name: Create artifact bucket if missing
-        run: |
-          aws s3 mb s3://film-finder-artifacts || true
+      - name: Get artifact bucket
+        id: tf_output
+        working-directory: infra
+        run: echo "bucket=$(terraform output -raw artifact_bucket)" >> $GITHUB_OUTPUT
+
 
       - name: Upload artifact to S3
-        run: aws s3 cp app/${{ steps.names.outputs.zip }} s3://film-finder-artifacts/
+        run: aws s3 cp app/${{ steps.names.outputs.zip }} s3://${{ steps.tf_output.outputs.bucket }}/
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -53,5 +55,4 @@ jobs:
         run: |
           terraform init
           terraform apply -auto-approve \
-            -var "artifact_bucket=film-finder-artifacts" \
             -var "artifact_key=${{ steps.names.outputs.zip }}"
