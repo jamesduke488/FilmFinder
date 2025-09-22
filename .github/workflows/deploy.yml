@@ -39,23 +39,52 @@ jobs:
           cp -r *.py package/
           cd package
           zip -r ../${{ steps.names.outputs.zip }} .
-        #   ls -lh ../${{ steps.names.outputs.zip }}
+
+      - name: Who am I?
+        run: |
+            aws sts get-caller-identity
+            aws configure list
+        
+      - name: Debug env
+        run: |
+            echo "TF version:"; terraform version
 
       - name: Terraform init
         working-directory: infra
         run: terraform init -upgrade
 
-      - name: Terraform apply (bucket only)
-        working-directory: infra
-        run: terraform apply -auto-approve -target=aws_s3_bucket.artifacts
+      - name: Compute bucket name
+        id: bucket
+        run: |
+            ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+            echo "name=film-finder-artifacts-${ACCOUNT_ID}" >> $GITHUB_OUTPUT
 
-      - name: Get artifact bucket
-        id: tf_output
+      - name: Ensure bucket is managed (import or create)
         working-directory: infra
-        run: echo "bucket=$(terraform output -raw artifact_bucket)" >> $GITHUB_OUTPUT
+        run: |
+            set -e
+            BUCKET="${{ steps.bucket.outputs.name }}"
+            echo "Target bucket: $BUCKET"
+            if aws s3api head-bucket --bucket "$BUCKET" 2>/dev/null; then
+                echo "Bucket exists in AWS. Importing into Terraform state (if not already)..."
+                terraform state show aws_s3_bucket.artifacts >/dev/null 2>&1 || \
+                    terraform import aws_s3_bucket.artifacts "$BUCKET" || true
+            else
+                echo "Bucket not found. Creating via Terraform (targeted apply)..."
+                terraform apply -input=false -auto-approve -target=aws_s3_bucket.artifacts
+            fi
+
+    #   - name: Terraform apply (bucket only)
+    #     working-directory: infra
+    #     run: terraform apply -auto-approve -target=aws_s3_bucket.artifacts
+
+    #   - name: Get artifact bucket
+    #     id: tf_output
+    #     working-directory: infra
+    #     run: echo "bucket=$(terraform output -raw artifact_bucket)" >> $GITHUB_OUTPUT
 
       - name: Upload artifact to S3
-        run: aws s3 cp app/${{ steps.names.outputs.zip }} s3://${{ steps.tf_output.outputs.bucket }}/
+        run: aws s3 cp app/${{ steps.names.outputs.zip }} s3://${{ steps.bucket.outputs.bucket }}/
 
       - name: Terraform apply (full)
         working-directory: infra
