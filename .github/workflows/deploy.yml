@@ -45,6 +45,9 @@ jobs:
       - name: Upload artifact to S3
         run: aws s3 cp app/${{ steps.names.outputs.zip }} s3://film-finder-artifacts/
 
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
       - name: Terraform init/plan/apply
         working-directory: infra
         run: |
