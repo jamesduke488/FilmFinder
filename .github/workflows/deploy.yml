@@ -10,7 +10,7 @@ permissions:
 
 env:
   AWS_REGION: eu-west-1
-#   TF_IN_AUTOMATION: "true"
+  TF_IN_AUTOMATION: "true"
 
 jobs:
   deploy:
