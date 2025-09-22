@@ -6,7 +6,12 @@ resource "aws_iam_role" "lambda_exec" {
 data "aws_iam_policy_document" "lambda_trust" {
   statement {
     effect = "Allow"
-    principals { type = "Service" identifiers = ["lambda.amazonaws.com"] }
+    
+    principals { 
+        type = "Service" 
+        identifiers = ["lambda.amazonaws.com"] 
+    }
+    
     actions = ["sts:AssumeRole"]
   }
 }
