@@ -1,5 +1,7 @@
+data "aws_caller_identity" "me" {}
+
 resource "aws_s3_bucket" "artifacts" {
-  bucket = var.artifact_bucket
+  bucket = "${var.project_name}-artifacts-${data.aws_caller_identity.me.account_id}"
   force_destroy = true
 }
 

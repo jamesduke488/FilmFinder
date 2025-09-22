@@ -10,7 +10,7 @@ permissions:
 
 env:
   AWS_REGION: eu-west-1
-  TF_IN_AUTOMATION: "true"
+#   TF_IN_AUTOMATION: "true"
 
 jobs:
   deploy:
@@ -25,6 +25,9 @@ jobs:
           role-to-assume: arn:aws:iam::454449944634:role/GitHubOIDCRole
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
       - name: Set artifact name
         id: names
         run: echo "zip=lambda_$(date +'%Y%m%d%H%M%S').zip" >> $GITHUB_OUTPUT
@@ -36,23 +39,26 @@ jobs:
           cp -r *.py package/
           cd package
           zip -r ../${{ steps.names.outputs.zip }} .
-          ls -lh ../${{ steps.names.outputs.zip }}
+        #   ls -lh ../${{ steps.names.outputs.zip }}
+
+      - name: Terraform init
+        working-directory: infra
+        run: terraform init -upgrade
+
+      - name: Terraform apply (bucket only)
+        working-directory: infra
+        run: terraform apply -auto-approve -target=aws_s3_bucket.artifacts
 
       - name: Get artifact bucket
         id: tf_output
         working-directory: infra
         run: echo "bucket=$(terraform output -raw artifact_bucket)" >> $GITHUB_OUTPUT
 
-
       - name: Upload artifact to S3
         run: aws s3 cp app/${{ steps.names.outputs.zip }} s3://${{ steps.tf_output.outputs.bucket }}/
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-
-      - name: Terraform init/plan/apply
+      - name: Terraform apply (full)
         working-directory: infra
         run: |
-          terraform init
           terraform apply -auto-approve \
             -var "artifact_key=${{ steps.names.outputs.zip }}"
