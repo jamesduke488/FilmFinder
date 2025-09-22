@@ -11,10 +11,11 @@ resource "aws_lambda_function" "api" {
   runtime       = "python3.12"
   handler       = "main.handler"
 
-  s3_bucket = aws_s3_bucket.artifacts.id
+  s3_bucket = aws_s3_bucket.artifacts.bucket
   s3_key    = var.artifact_key
 
   timeout = 10
+  
   environment {
     variables = {
       OMDB_API_KEY = data.aws_ssm_parameter.omdb.value
