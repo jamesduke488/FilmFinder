@@ -22,7 +22,7 @@ jobs:
       - name: Configure AWS (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::454449944634:role/GitHubOIDCRole
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Setup Terraform
@@ -53,38 +53,88 @@ jobs:
         working-directory: infra
         run: terraform init -upgrade
 
-    #   - name: Compute bucket name
-    #     id: bucket
-    #     run: |
-    #         ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-    #         echo "name=film-finder-artifacts-${ACCOUNT_ID}" >> $GITHUB_OUTPUT
-
-    #   - name: Ensure bucket is managed (import or create)
-    #     working-directory: infra
-    #     run: |
-    #         set -e
-    #         BUCKET="${{ steps.bucket.outputs.name }}"
-    #         echo "Target bucket: $BUCKET"
-    #         if aws s3api head-bucket --bucket "$BUCKET" 2>/dev/null; then
-    #             echo "Bucket exists in AWS. Importing into Terraform state (if not already)..."
-    #             terraform state show aws_s3_bucket.artifacts >/dev/null 2>&1 || \
-    #                 terraform import aws_s3_bucket.artifacts "$BUCKET" || true
-    #         else
-    #             echo "Bucket not found. Creating via Terraform (targeted apply)..."
-    #             terraform apply -input=false -auto-approve -target=aws_s3_bucket.artifacts
-    #         fi
-
-      - name: Terraform apply (bucket only)
+        # Create the bucket via Terraform if needed (target only)
+      - name: Ensure bucket exists (Terraform target)
         working-directory: infra
-        run: terraform apply -auto-approve -target=aws_s3_bucket.artifacts
+        run: terraform apply -input=false -auto-approve -target=aws_s3_bucket.artifacts
 
-      - name: Get artifact bucket
-        id: tf_output
+    # Resolve bucket name: try TF output first; fallback to deterministic name
+      - name: Resolve bucket name
+        id: bucket
         working-directory: infra
-        run: echo "bucket=$(terraform output -raw artifact_bucket)" >> $GITHUB_OUTPUT
+        shell: bash
+        run: |
+            set -euo pipefail
+            # Try to read from TF outputs (requires output "artifact_bucket" in outputs.tf)
+            BKT="$(terraform output -raw artifact_bucket || true)"
+            if [ -z "$BKT" ]; then
+                echo "Terraform output empty; computing bucket name from account id..."
+                ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+                BKT="film-finder-artifacts-${ACCOUNT_ID}"
+            fi
+            if [ -z "$BKT" ]; then
+                echo "ERROR: Bucket name still empty. Check outputs.tf and terraform state." >&2
+                exit 1
+            fi
+            echo "bucket=$BKT" >> "$GITHUB_OUTPUT"
+            echo "Using bucket: $BKT"
 
+    # (Optional) Import into state if it exists but TF doesn't know it yet
+      - name: Import bucket into state if needed
+        working-directory: infra
+        shell: bash
+        run: |
+            set -euo pipefail
+            BKT="${{ steps.bucket.outputs.bucket }}"
+            # If state doesn't have the resource yet, try to import (ignore if it already exists in state)
+            if ! terraform state show aws_s3_bucket.artifacts >/dev/null 2>&1; then
+                echo "Terraform state missing bucket; attempting import..."
+                terraform import aws_s3_bucket.artifacts "$BKT" || true
+            fi
+
+    # Upload the artifact to the resolved bucket
       - name: Upload artifact to S3
-        run: aws s3 cp app/${{ steps.names.outputs.zip }} s3://${{ steps.bucket.outputs.bucket }}/
+        run: |
+            set -euo pipefail
+            BKT="${{ steps.bucket.outputs.bucket }}"
+            if [ -z "$BKT" ]; then
+                echo "ERROR: Bucket name is empty; aborting upload." >&2
+                exit 1
+            fi
+            aws s3 cp app/${{ steps.names.outputs.zip }} s3://$BKT/
+
+        #   - name: Compute bucket name
+        #     id: bucket
+        #     run: |
+        #         ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+        #         echo "name=film-finder-artifacts-${ACCOUNT_ID}" >> $GITHUB_OUTPUT
+
+        #   - name: Ensure bucket is managed (import or create)
+        #     working-directory: infra
+        #     run: |
+        #         set -e
+        #         BUCKET="${{ steps.bucket.outputs.name }}"
+        #         echo "Target bucket: $BUCKET"
+        #         if aws s3api head-bucket --bucket "$BUCKET" 2>/dev/null; then
+        #             echo "Bucket exists in AWS. Importing into Terraform state (if not already)..."
+        #             terraform state show aws_s3_bucket.artifacts >/dev/null 2>&1 || \
+        #                 terraform import aws_s3_bucket.artifacts "$BUCKET" || true
+        #         else
+        #             echo "Bucket not found. Creating via Terraform (targeted apply)..."
+        #             terraform apply -input=false -auto-approve -target=aws_s3_bucket.artifacts
+        #         fi
+
+    #   - name: Terraform apply (bucket only)
+    #     working-directory: infra
+    #     run: terraform apply -auto-approve -target=aws_s3_bucket.artifacts
+
+    #   - name: Get artifact bucket
+    #     id: tf_output
+    #     working-directory: infra
+    #     run: echo "bucket=$(terraform output -raw artifact_bucket)" >> $GITHUB_OUTPUT
+
+    #   - name: Upload artifact to S3
+    #     run: aws s3 cp app/${{ steps.names.outputs.zip }} s3://${{ steps.bucket.outputs.bucket }}/
 
       - name: Terraform apply (full)
         working-directory: infra

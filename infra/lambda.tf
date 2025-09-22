@@ -1,7 +1,7 @@
 data "aws_caller_identity" "me" {}
 
 resource "aws_s3_bucket" "artifacts" {
-  bucket = "${var.project_name}-artifacts-${data.aws_caller_identity.me.account_id}"
+  bucket        = "${var.project_name}-artifacts-${data.aws_caller_identity.me.account_id}"
   force_destroy = true
 }
 
@@ -15,7 +15,7 @@ resource "aws_lambda_function" "api" {
   s3_key    = var.artifact_key
 
   timeout = 10
-  
+
   environment {
     variables = {
       OMDB_API_KEY = data.aws_ssm_parameter.omdb.value
