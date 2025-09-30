@@ -59,7 +59,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "project=$(terraform output -raw project_name)" >> "$GITHUB_OUTPUT"
-          echo "bucket=$(terraform output -raw artifacts_bucket_name)" >> "$GITHUB_OUTPUT"
+          echo "bucket=$(terraform output -raw artifact_bucket)" >> "$GITHUB_OUTPUT"
 
       - name: Ensure Lambda exec role is managed (import/create)
         working-directory: infra
