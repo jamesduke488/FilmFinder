@@ -1,6 +1,12 @@
 resource "aws_iam_role" "lambda_exec" {
   name               = "${var.project_name}-lambda-exec"
   assume_role_policy = data.aws_iam_policy_document.lambda_trust.json
+  force_detach_policies = true
+
+  tags = {
+    Project = "${var.project_name}"
+    ManagedBy = "terraform"
+  }
 }
 
 data "aws_iam_policy_document" "lambda_trust" {

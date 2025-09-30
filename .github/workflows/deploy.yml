@@ -53,15 +53,29 @@ jobs:
         working-directory: infra
         run: terraform init -upgrade
 
-        # Compute bucket name exactly like TF does: "${var.project_name}-artifacts-${accountId}"
-      - name: Compute bucket name
-        id: bucket
+      - name: Read TF outputs (names)
+        id: tfout
+        working-directory: infra
+        run: |
+          set -euo pipefail
+          echo "project=$(terraform output -raw project_name)" >> "$GITHUB_OUTPUT"
+          echo "bucket=$(terraform output -raw artifacts_bucket_name)" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure Lambda exec role is managed (import/create)
+        working-directory: infra
         shell: bash
         run: |
-            set -euo pipefail
-            ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-            echo "name=film-finder-artifacts-${ACCOUNT_ID}" >> "$GITHUB_OUTPUT"
-            echo "Bucket will be: film-finder-artifacts-${ACCOUNT_ID}"
+          set -euo pipefail
+          ROLE_NAME="${{ steps.tfout.outputs.project_name}}-lambda-exec"
+
+          if aws iam get-role --role-name "$ROLE_NAME" >/dev/null 2>&1; then
+            echo "Role exists. Importing into Terraform state if missing..."
+            terraform state show aws_iam_role.lambda_exec >/dev/null 2>&1; || \
+              terraform import show aws_iam_role.lambda_exec "$ROLE_NAME"
+          else
+            echo "Role not found. Creating via targeted apply..."
+            terraform apply -input=false -auto-approve -target=aws_iam_role.lambda_exec
+          fi
 
         # Ensure TF state knows about the bucket: import if it exists, otherwise create it
       - name: Ensure bucket managed (import or create)
@@ -69,7 +83,7 @@ jobs:
         shell: bash
         run: |
             set -euo pipefail
-            BUCKET="${{ steps.bucket.outputs.name }}"
+            BUCKET="${{ steps.tfout.outputs.artifact_bucket }}"
             if aws s3api head-bucket --bucket "$BUCKET" 2>/dev/null; then
                 echo "Bucket exists in AWS. Importing into Terraform state if missing..."
                 terraform state show aws_s3_bucket.artifacts >/dev/null 2>&1 || \
@@ -81,7 +95,7 @@ jobs:
 
         # Upload the zip (this bucket name will now be valid)
       - name: Upload artifact to S3
-        run: aws s3 cp app/${{ steps.names.outputs.zip }} s3://${{ steps.bucket.outputs.name }}/
+        run: aws s3 cp app/${{ steps.names.outputs.zip }} s3://${{ steps.tfout.outputs.artifact_bucket }}/
 
         # Finish with full apply (no -target here)
       - name: Terraform apply (full)
