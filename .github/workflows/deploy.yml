@@ -75,7 +75,7 @@ jobs:
           if aws iam get-role --role-name "$ROLE_NAME" >/dev/null 2>&1; then
             echo "Role exists. Importing into Terraform state if missing..."
             terraform state show aws_iam_role.lambda_exec >/dev/null 2>&1; || \
-              terraform import show aws_iam_role.lambda_exec "$ROLE_NAME"
+              terraform import aws_iam_role.lambda_exec "$ROLE_NAME"
           else
             echo "Role not found. Creating via targeted apply..."
             terraform apply -input=false -auto-approve -target=aws_iam_role.lambda_exec
