@@ -71,22 +71,36 @@ jobs:
         run: |
           set -euo pipefail
           ROLE_NAME="${{ steps.tfout.outputs.project_name}}-lambda-exec"
+          echo "Target exec role: $ROLE_NAME"
 
-          # Check if resource is already in Terraform state. If yes, pass.
           if terraform state show aws_iam_role.lambda_exec >/dev/null 2>&1; then
             echo "Role already in Terraform state."
             exit 0
           fi
 
-          echo "Role not in Terraform state. Checking AWS..."
+          AWS_ERR="$(aws iam get-role --role-name "$ROLE_NAME" >/dev/null 2>&1 || true)"
 
-          if aws iam get-role --role-name "$ROLE_NAME" >/dev/null 2>&1; then
-            echo "Role exists. Importing into Terraform state if missing..."
+          if [ -z "$AWS_ERR" ]; then
+            echo "Role exists in AWS but not in TF state; importing..."
             terraform import aws_iam_role.lambda_exec "$ROLE_NAME"
-          else
-            echo "Role not found. Creating via targeted apply..."
-            terraform apply -input=false -auto-approve -target=aws_iam_role.lambda_exec
+            exit 0
           fi
+
+          if echo "$AWS_ERR" | grep -qi 'AccessDenied'; then
+            echo "ERROR: AccessDenied when calling iam:GetRole for '$ROLE_NAME'."
+            echo "Your deploy role needs iam:GetRole (scoped to this role). Aborting to avoid 409s."
+            exit 1
+          fi
+
+          if echo "$AWS_ERR" | grep -qi 'NoSuchEntity'; then
+            echo "Role not found in AWS; creating via targeted apply..."
+            terraform apply -input=false -auto-approve -target=aws_iam_role.lambda_exec
+            exit 0
+          fi
+
+          echo "Unexpected error from aws iam get-role:"
+          echo "$AWS_ERR"
+          exit 1
 
         # Ensure TF state knows about the bucket: import if it exists, otherwise create it
       - name: Ensure bucket managed (import or create)
