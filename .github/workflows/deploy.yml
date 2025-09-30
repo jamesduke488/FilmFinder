@@ -53,6 +53,10 @@ jobs:
         working-directory: infra
         run: terraform init -upgrade
 
+      - name: Create/refresh state (no changes)
+        working-directory: infra
+        run: terraform apply -refresh-only -input=false -auto-approve
+
       - name: Read TF outputs (names)
         id: tfout
         working-directory: infra
