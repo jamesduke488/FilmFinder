@@ -102,6 +102,30 @@ jobs:
           echo "$AWS_ERR"
           exit 1
 
+      - name: Ensure SSM read policy managed (import/create)
+        working-directory: infra
+        shell: bash
+        run: |
+          set -euo pipefail
+          POLICY_NAME="${{ steps.tfout.outputs.project }}-ssm-read"
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          POLICY_ARN="arn:aws:iam::${ACCOUNT_ID}:policy/${POLICY_NAME}"
+          echo "Target policy: $POLICY_ARN"
+
+          if terraform state show aws_iam_policy.ssm_read >/dev/null 2>&1; then
+            echo "Policy already in Terraform state."
+            exit 0
+          fi
+
+          if aws iam get-policy --policy-arn "$POLICY_ARN" >/dev/null 2>&1; then
+            echo "Policy exists in AWS but not in TF state; importing..."
+            terraform import aws_iam_policy.ssm_read "$POLICY_ARN"
+            exit 0
+          fi
+
+          echo "Policy not found in AWS; creating via targeted apply..."
+          terraform apply -input=false -auto-approve -target=aws_iam_policy.ssm_read
+
         # Ensure TF state knows about the bucket: import if it exists, otherwise create it
       - name: Ensure bucket managed (import or create)
         working-directory: infra
@@ -117,6 +141,27 @@ jobs:
                 echo "Bucket not found. Creating via targeted apply..."
                 terraform apply -input=false -auto-approve -target=aws_s3_bucket.artifacts
             fi
+
+      - name: Ensure Lambda function managed (import if exists)
+        working-directory: infra
+        shell: bash
+        run: |
+          set -euo pipefail
+          FUNC_NAME="${{ steps.tfout.outputs.project }}-lambda"
+          echo "Target function: $FUNC_NAME"
+
+          if terraform state show aws_lambda_function.api >/dev/null 2>&1; then
+            echo "Lambda already in Terraform state."
+            exit 0
+          fi
+
+          if aws lambda get-function --function-name "$FUNC_NAME" >/dev/null 2>&1; then
+            echo "Lambda exists in AWS but not in TF state; importing..."
+            terraform import aws_lambda_function.api "$FUNC_NAME"
+            exit 0
+          fi
+
+          echo "Lambda not found. Will be created in final apply."
 
         # Upload the zip (this bucket name will now be valid)
       - name: Upload artifact to S3

@@ -35,7 +35,7 @@ resource "aws_iam_policy" "ssm_read" {
     Statement = [{
       Effect   = "Allow"
       Action   = ["ssm:GetParameter", "ssm:GetParameters"]
-      Resource = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.me.account_id}:parameter/filmFinder/omdbApiKey"
+      Resource = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.me.account_id}:parameter/film-finder/omdbApiKey"
     }]
   })
 }

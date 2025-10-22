@@ -5,7 +5,7 @@ from mangum import Mangum
 
 app = FastAPI(title="Film Finder API")
 
-OMDB_URL = "http://www.omdbapi.com/"
+OMDB_URL = "https://www.omdbapi.com/"
 
 def getOmdbApiKey() -> str:
     if apiKey := os.getenv("OMDB_API_KEY"):
@@ -17,7 +17,10 @@ def getOmdbApiKey() -> str:
 def getMovie(title: str = Query(..., min_length=1)):
     """Return cleaned movie details from OMDb."""
     params = {"t": title, "apikey": getOmdbApiKey(), "plot": "short"}
-    r = requests.get(OMDB_URL, params=params, timeout=8)
+    try:
+        r = requests.get(OMDB_URL, params=params, timeout=8)
+    except requests.RequestException:
+        raise HTTPException(status_code=502, detail="Upstream error")
     if r.status_code != 200:
         raise HTTPException(status_code=502, detail="Upstream error")
     data = r.json()
@@ -31,5 +34,9 @@ def getMovie(title: str = Query(..., min_length=1)):
         "genre": data.get("Genre"),
         "plot": data.get("Plot"),
     }
+
+@app.get("/healthz")
+def healthz():
+    return {"status": "ok"}
 
 handler = Mangum(app)
