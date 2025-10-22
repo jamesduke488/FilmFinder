@@ -70,7 +70,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ROLE_NAME="${{ steps.tfout.outputs.project_name}}-lambda-exec"
+          ROLE_NAME="${{ steps.tfout.outputs.project}}-lambda-exec"
           echo "Target exec role: $ROLE_NAME"
 
           if terraform state show aws_iam_role.lambda_exec >/dev/null 2>&1; then
@@ -108,7 +108,7 @@ jobs:
         shell: bash
         run: |
             set -euo pipefail
-            BUCKET="${{ steps.tfout.outputs.artifact_bucket }}"
+            BUCKET="${{ steps.tfout.outputs.bucket }}"
             if aws s3api head-bucket --bucket "$BUCKET" 2>/dev/null; then
                 echo "Bucket exists in AWS. Importing into Terraform state if missing..."
                 terraform state show aws_s3_bucket.artifacts >/dev/null 2>&1 || \
@@ -120,7 +120,7 @@ jobs:
 
         # Upload the zip (this bucket name will now be valid)
       - name: Upload artifact to S3
-        run: aws s3 cp app/${{ steps.names.outputs.zip }} s3://${{ steps.tfout.outputs.artifact_bucket }}/
+        run: aws s3 cp app/${{ steps.names.outputs.zip }} s3://${{ steps.tfout.outputs.bucket }}/
 
         # Finish with full apply (no -target here)
       - name: Terraform apply (full)
