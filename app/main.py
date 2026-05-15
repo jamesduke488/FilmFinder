@@ -5,13 +5,14 @@ from mangum import Mangum
 
 app = FastAPI(title="Film Finder API")
 
+MY_DIRECTORY = os.path.expanduser("~")
 OMDB_URL = "https://www.omdbapi.com/"
 
 def getOmdbApiKey() -> str:
-    if apiKey := os.getenv("OMDB_API_KEY"):
-        return apiKey
-    else:
-        raise RuntimeError("OMDB_API_KEY not set")
+    with open(os.path.join(MY_DIRECTORY, '.secret', 'file.txt')) as f:
+        API_KEY = f.read()
+
+    return API_KEY
 
 @app.get("/movie")
 def getMovie(title: str = Query(..., min_length=1)):
@@ -26,14 +27,20 @@ def getMovie(title: str = Query(..., min_length=1)):
     data = r.json()
     if data.get("Response") != "True":
         raise HTTPException(status_code=404, detail=data.get("Error", "Not found"))
-    return {
+    res = {
         "title": data.get("Title"),
         "year": data.get("Year"),
         "director": data.get("Director"),
         "rating": next((x["Value"] for x in data.get("Ratings", []) if x["Source"]=="Internet Movie Database"), None),
         "genre": data.get("Genre"),
         "plot": data.get("Plot"),
+        "cast": data.get("Cast")
     }
+
+    return res
+
+    # for key, value in res.items():
+    #     yield f"{key}: {value}\n"
 
 @app.get("/healthz")
 def healthz():
